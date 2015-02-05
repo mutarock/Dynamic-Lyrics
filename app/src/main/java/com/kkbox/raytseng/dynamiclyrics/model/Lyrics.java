@@ -5,19 +5,49 @@ package com.kkbox.raytseng.dynamiclyrics.model;
  */
 public class Lyrics {
 
-    public String lyric;
-    public int startTime;
-    public int endTime;
-    public boolean focus;
+    private String lyric;
+    private int startTime;
+    private int endTime;
+    private boolean isFocus;
+    private boolean isEmptyLine;
 
     public Lyrics(String lyric, int startTime, int endTime) {
 
         this.lyric = lyric;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.focus = false;
+        this.isFocus = false;
+
+        if (startTime == 0 && endTime == 0) {
+            isEmptyLine = true;
+        } else {
+            isEmptyLine = false;
+        }
 
     }
 
+    public String getLyric() {
+        return lyric;
+    }
+
+    public int getStartTime() {
+        return startTime;
+    }
+
+    public int getEndTime() {
+        return endTime;
+    }
+
+    public void setFocus(boolean isFocus) {
+        this.isFocus = isFocus;
+    }
+
+    public boolean isFocus() {
+        return isFocus;
+    }
+
+    public boolean isEmptyLine() {
+        return isEmptyLine;
+    }
 
 }

@@ -5,7 +5,8 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
-import android.util.Log;
+import android.os.Handler;
+import android.os.Message;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -23,15 +24,18 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
 
 
 public class MainLyricsActivity extends ActionBarActivity {
 
     private MediaPlayer mediaPlayer;
-    private Uri fileUri;
     private ListView lyricsListView;
     private LyricsAdapter lyricsAdapter;
     private ArrayList<Lyrics> lyricsData;
+    private Timer mTimer;
+    private int lastItemIndex = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,8 +76,7 @@ public class MainLyricsActivity extends ActionBarActivity {
     private void initLyrics() {
         lyricsData = new ArrayList<Lyrics>();
 
-        // TODO - Get lyrics data from local assets
-        String totalLyrics = loadJSONFromAsset();
+        String totalLyrics = loadJSONFromAsset("lyrics.json");
         JSONObject jsonObj;
         try {
             jsonObj = new JSONObject(totalLyrics);
@@ -83,8 +86,11 @@ public class MainLyricsActivity extends ActionBarActivity {
                 JSONObject singleLine = array.getJSONObject(index);
 
                 String content = singleLine.getString("content");
-                String startTime = singleLine.getString("startTime");
-                String endTime = singleLine.getString("endTime");
+                int startTime = convertTimeFormatToSeconds(singleLine.getString("startTime"));
+                int endTime = convertTimeFormatToSeconds(singleLine.getString("endTime"));
+
+                Lyrics lyrics = new Lyrics(content, startTime, endTime);
+                lyricsData.add(lyrics);
 
 
             }
@@ -105,8 +111,12 @@ public class MainLyricsActivity extends ActionBarActivity {
         lyricsListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                // TODO - seek to select position
 
+                Lyrics lyrics = lyricsData.get(position);
+                if (!lyrics.isEmptyLine()) {
+                    lyricsData.get(lastItemIndex).setFocus(false);
+                    mediaPlayer.seekTo(lyrics.getStartTime() * 1000);
+                }
 
             }
         });
@@ -117,7 +127,7 @@ public class MainLyricsActivity extends ActionBarActivity {
     private void initPlayer() {
         mediaPlayer = new MediaPlayer();
 
-        fileUri = Uri.parse(getString(R.string.not_your_kind_people));
+        Uri fileUri = Uri.parse(getString(R.string.not_your_kind_people));
 
         mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
         try {
@@ -129,6 +139,15 @@ public class MainLyricsActivity extends ActionBarActivity {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
                     mp.start();
+                    initTimerForLyrics();
+
+                }
+            });
+
+            mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) {
+                    setListViewToSelectIndex(0);
 
                 }
             });
@@ -138,18 +157,16 @@ public class MainLyricsActivity extends ActionBarActivity {
         } catch (IOException ioe) {
             ioe.printStackTrace();
 
-        } catch (IllegalArgumentException ile) {
-            ile.printStackTrace();
-
         }
 
     }
 
-    public String loadJSONFromAsset() {
+
+    private String loadJSONFromAsset(String fileName) {
         String json = "";
 
         try {
-            InputStream is = getAssets().open("lyrics.json");
+            InputStream is = getAssets().open(fileName);
             int size = is.available();
             byte[] buffer = new byte[size];
             is.read(buffer);
@@ -164,6 +181,81 @@ public class MainLyricsActivity extends ActionBarActivity {
 
         return json;
     }
+
+
+    private int convertTimeFormatToSeconds(String timeFormat) {
+
+        String[] tokens = timeFormat.split(":");
+
+        int seconds = 0;
+        int exponent = tokens.length-1;
+        for(int index = tokens.length-1 ; index >= 0 ; index--) {
+            seconds += Integer.parseInt(tokens[index]) * (int)(Math.pow(60, exponent-index));
+        }
+
+        return seconds;
+
+    }
+
+
+    private void initTimerForLyrics() {
+        mTimer = new Timer();
+        mTimer.schedule(myTask, 0 , 500);
+
+    }
+
+
+    private void setListViewToSelectIndex(final int itemIndex) {
+        lyricsListView.post(new Runnable() {
+            @Override
+            public void run() {
+                lyricsListView.smoothScrollToPositionFromTop(itemIndex, lyricsListView.getHeight() / 2);
+            }
+        });
+
+    }
+
+
+    private TimerTask myTask = new TimerTask() {
+
+        @Override
+        public void run() {
+            handler.obtainMessage(0).sendToTarget();
+        }
+
+    };
+
+
+    private Handler handler = new Handler() {
+
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+
+            int currentTime = mediaPlayer.getCurrentPosition() / 1000;
+            int currentItemIndex = lastItemIndex;
+
+            for (int i = 1 ; i < lyricsData.size() ; i++) {
+                if (currentTime >= lyricsData.get(i).getStartTime() && currentTime <= lyricsData.get(i).getEndTime() && !lyricsData.get(i).isEmptyLine()) {
+                    lyricsData.get(i).setFocus(true);
+                    currentItemIndex = i;
+
+                    break;
+
+                } else {
+                    lyricsData.get(i).setFocus(false);
+
+                }
+            }
+
+            if (lastItemIndex != currentItemIndex) {
+                lyricsAdapter.notifyDataSetChanged();
+                setListViewToSelectIndex(currentItemIndex);
+                lastItemIndex = currentItemIndex;
+
+            }
+        }
+
+    };
 
 
 }
